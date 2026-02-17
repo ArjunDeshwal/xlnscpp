@@ -44,12 +44,29 @@
   #define xlns16_esszer        0x0500
   #define xlns16_canonshift    15
 
+// Useful constant values (pre-computed LNS representations)
+
+// xlns16_one:     log2(1.0) = 0, so internal = 0 ^ logsignmask = 0x4000
+// xlns16_two:     log2(2.0) = 1, scaled = 0x0080, internal = 0x0080 ^ 0x4000 = 0x4080
+// xlns16_half:    log2(0.5) = -1, scaled = -0x0080, internal = 0x3F80
+// xlns16_neg_one: same as xlns16_one but with sign bit set
+#define xlns16_one          0x4000
+#define xlns16_neg_one      0xC000
+#define xlns16_two          0x4080
+#define xlns16_neg_two      0xC080
+#define xlns16_half         0x3F80
+#define xlns16_neg_half     0xBF80
+
+// Basic unary operations (macros for efficiency)
 #define xlns16_sign(x)  ((x) & xlns16_signmask)
 #define xlns16_neg(x)   ((x) ^ xlns16_signmask)
 #define xlns16_abs(x)   ((x) & xlns16_logmask)
 #define xlns16_recip(x) (xlns16_sign(x)|xlns16_abs((~x)+1))
 #define xlns16_sqrt(x)   (xlns16_abs(((xlns16_signed)((x)<<1))/4)^xlns16_sqrtmask)
 #define xlns16_canon(x) ((x)^(-((x)>>xlns16_canonshift)|xlns16_signmask))
+
+// Square: x^2 (efficient in LNS: double the log)
+#define xlns16_square(x) xlns16_mul((x), (x))
 
 inline xlns16 xlns16_overflow(xlns16 xlns16_x, xlns16 xlns16_y, xlns16 xlns16_temp)
 {       //printf("%d %d %d\n",xlns16_temp,xlns16_x,xlns16_y);
@@ -273,6 +290,310 @@ float xlns162fp(xlns16 x)
 }
 
 #endif
+
+// Comparison and utility functions
+
+// Check if value is zero
+inline int xlns16_is_zero(xlns16 x) {
+    return (xlns16_abs(x) == xlns16_zero);
+}
+
+// Check if value is negative
+inline int xlns16_is_negative(xlns16 x) {
+    return (xlns16_sign(x) != 0) && !xlns16_is_zero(x);
+}
+
+// Check if value is positive
+inline int xlns16_is_positive(xlns16 x) {
+    return (xlns16_sign(x) == 0) && !xlns16_is_zero(x);
+}
+
+// Greater than comparison (returns 1 if a > b)
+inline int xlns16_gt(xlns16 a, xlns16 b) {
+    return xlns16_canon(a) > xlns16_canon(b);
+}
+
+// Less than comparison (returns 1 if a < b)
+inline int xlns16_lt(xlns16 a, xlns16 b) {
+    return xlns16_canon(a) < xlns16_canon(b);
+}
+
+// Equal comparison
+inline int xlns16_eq(xlns16 a, xlns16 b) {
+    return a == b;
+}
+
+// Greater than or equal
+inline int xlns16_ge(xlns16 a, xlns16 b) {
+    return xlns16_canon(a) >= xlns16_canon(b);
+}
+
+// Less than or equal
+inline int xlns16_le(xlns16 a, xlns16 b) {
+    return xlns16_canon(a) <= xlns16_canon(b);
+}
+
+// Maximum of two values
+inline xlns16 xlns16_max(xlns16 a, xlns16 b) {
+    return xlns16_gt(a, b) ? a : b;
+}
+
+// Minimum of two values
+inline xlns16 xlns16_min(xlns16 a, xlns16 b) {
+    return xlns16_lt(a, b) ? a : b;
+}
+
+// Copy sign from y to x (magnitude of x, sign of y)
+inline xlns16 xlns16_copysign(xlns16 x, xlns16 y) {
+    return xlns16_abs(x) | xlns16_sign(y);
+}
+
+// Fused multiply-add: a * b + c
+inline xlns16 xlns16_fma(xlns16 a, xlns16 b, xlns16 c) {
+    return xlns16_add(xlns16_mul(a, b), c);
+}
+
+// Batch conversion functions (for ggml tensor operations)
+
+// Batch convert float array to xlns16 array
+inline void xlns16_batch_from_float(const float *src, xlns16 *dst, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        dst[i] = fp2xlns16(src[i]);
+    }
+}
+
+// Batch convert xlns16 array to float array
+inline void xlns16_batch_to_float(const xlns16 *src, float *dst, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        dst[i] = xlns162fp(src[i]);
+    }
+}
+
+
+// Batch element-wise operations
+
+// Batch multiplication: c[i] = a[i] * b[i]
+inline void xlns16_batch_mul(const xlns16 *a, const xlns16 *b, xlns16 *c, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        c[i] = xlns16_mul(a[i], b[i]);
+    }
+}
+
+// Batch addition: c[i] = a[i] + b[i]
+inline void xlns16_batch_add(const xlns16 *a, const xlns16 *b, xlns16 *c, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        c[i] = xlns16_add(a[i], b[i]);
+    }
+}
+
+// Batch subtraction: c[i] = a[i] - b[i]
+inline void xlns16_batch_sub(const xlns16 *a, const xlns16 *b, xlns16 *c, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        c[i] = xlns16_sub(a[i], b[i]);
+    }
+}
+
+// Batch division: c[i] = a[i] / b[i]
+inline void xlns16_batch_div(const xlns16 *a, const xlns16 *b, xlns16 *c, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        c[i] = xlns16_div(a[i], b[i]);
+    }
+}
+
+// Batch scale: c[i] = a[i] * scalar
+inline void xlns16_batch_scale(const xlns16 *a, xlns16 scalar, xlns16 *c, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        c[i] = xlns16_mul(a[i], scalar);
+    }
+}
+
+// Batch negation: c[i] = -a[i]
+inline void xlns16_batch_neg(const xlns16 *a, xlns16 *c, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        c[i] = xlns16_neg(a[i]);
+    }
+}
+
+// Batch absolute value: c[i] = |a[i]|
+inline void xlns16_batch_abs(const xlns16 *a, xlns16 *c, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        c[i] = xlns16_abs(a[i]);
+    }
+}
+
+// Vector operations (critical for ggml MUL_MAT)
+
+// Sum of array elements: result = Σ a[i]
+inline xlns16 xlns16_sum(const xlns16 *a, size_t n) {
+    if (n == 0) return xlns16_zero;
+    xlns16 sum = a[0];
+    for (size_t i = 1; i < n; i++) {
+        sum = xlns16_add(sum, a[i]);
+    }
+    return sum;
+}
+
+// Vector dot product: result = Σ(a[i] * b[i])
+inline xlns16 xlns16_vec_dot(const xlns16 *a, const xlns16 *b, size_t n) {
+    if (n == 0) return xlns16_zero;
+    xlns16 sum = xlns16_mul(a[0], b[0]);
+    for (size_t i = 1; i < n; i++) {
+        sum = xlns16_add(sum, xlns16_mul(a[i], b[i]));
+    }
+    return sum;
+}
+
+// Vector dot product with float inputs (converts to LNS internally)
+inline float xlns16_vec_dot_f32(const float *a, const float *b, size_t n) {
+    if (n == 0) return 0.0f;
+    xlns16 sum = xlns16_mul(fp2xlns16(a[0]), fp2xlns16(b[0]));
+    for (size_t i = 1; i < n; i++) {
+        xlns16 prod = xlns16_mul(fp2xlns16(a[i]), fp2xlns16(b[i]));
+        sum = xlns16_add(sum, prod);
+    }
+    return xlns162fp(sum);
+}
+
+// Maximum element in array
+inline xlns16 xlns16_max_array(const xlns16 *a, size_t n) {
+    if (n == 0) return xlns16_zero;
+    xlns16 maxval = a[0];
+    for (size_t i = 1; i < n; i++) {
+        if (xlns16_gt(a[i], maxval)) {
+            maxval = a[i];
+        }
+    }
+    return maxval;
+}
+
+// Minimum element in array
+inline xlns16 xlns16_min_array(const xlns16 *a, size_t n) {
+    if (n == 0) return xlns16_zero;
+    xlns16 minval = a[0];
+    for (size_t i = 1; i < n; i++) {
+        if (xlns16_lt(a[i], minval)) {
+            minval = a[i];
+        }
+    }
+    return minval;
+}
+
+// Activation functions (for neural network operations)
+
+// ReLU: max(0, x)
+inline xlns16 xlns16_relu(xlns16 x) {
+    return xlns16_is_negative(x) ? xlns16_zero : x;
+}
+
+// Batch ReLU
+inline void xlns16_batch_relu(const xlns16 *a, xlns16 *c, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        c[i] = xlns16_relu(a[i]);
+    }
+}
+
+// Sigmoid: 1 / (1 + exp(-x))
+inline xlns16 xlns16_sigmoid(xlns16 x) {
+    float fx = xlns162fp(x);
+    float result = 1.0f / (1.0f + expf(-fx));
+    return fp2xlns16(result);
+}
+
+// Batch sigmoid
+inline void xlns16_batch_sigmoid(const xlns16 *a, xlns16 *c, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        c[i] = xlns16_sigmoid(a[i]);
+    }
+}
+
+// Tanh
+inline xlns16 xlns16_tanh(xlns16 x) {
+    float fx = xlns162fp(x);
+    float result = tanhf(fx);
+    return fp2xlns16(result);
+}
+
+// Batch tanh
+inline void xlns16_batch_tanh(const xlns16 *a, xlns16 *c, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        c[i] = xlns16_tanh(a[i]);
+    }
+}
+
+// SiLU (Swish): x * sigmoid(x) = x / (1 + exp(-x))
+inline xlns16 xlns16_silu(xlns16 x) {
+    float fx = xlns162fp(x);
+    float result = fx / (1.0f + expf(-fx));
+    return fp2xlns16(result);
+}
+
+// Batch SiLU
+inline void xlns16_batch_silu(const xlns16 *a, xlns16 *c, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        c[i] = xlns16_silu(a[i]);
+    }
+}
+
+// GELU approximation
+inline xlns16 xlns16_gelu(xlns16 x) {
+    float fx = xlns162fp(x);
+    const float sqrt_2_over_pi = 0.7978845608f;
+    float inner = sqrt_2_over_pi * (fx + 0.044715f * fx * fx * fx);
+    float result = 0.5f * fx * (1.0f + tanhf(inner));
+    return fp2xlns16(result);
+}
+
+// Batch GELU
+inline void xlns16_batch_gelu(const xlns16 *a, xlns16 *c, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        c[i] = xlns16_gelu(a[i]);
+    }
+}
+
+// Softmax helper: subtract max for numerical stability, then exp
+inline void xlns16_softmax_exp(const xlns16 *a, xlns16 *c, size_t n) {
+    xlns16 maxval = xlns16_max_array(a, n);
+    for (size_t i = 0; i < n; i++) {
+        float fx = xlns162fp(a[i]) - xlns162fp(maxval);
+        c[i] = fp2xlns16(expf(fx));
+    }
+}
+
+// exp and log in LNS
+
+// exp(x) - computes e^x
+inline xlns16 xlns16_exp(xlns16 x) {
+    float fx = xlns162fp(x);
+    return fp2xlns16(expf(fx));
+}
+
+// log(x) - computes natural log
+inline xlns16 xlns16_log(xlns16 x) {
+    float fx = xlns162fp(x);
+    if (fx <= 0.0f) return xlns16_zero;
+    return fp2xlns16(logf(fx));
+}
+
+// exp2(x) - computes 2^x
+inline xlns16 xlns16_exp2(xlns16 x) {
+    float fx = xlns162fp(x);
+    return fp2xlns16(exp2f(fx));
+}
+
+// log2(x) - computes log base 2
+inline xlns16 xlns16_log2(xlns16 x) {
+    float fx = xlns162fp(x);
+    if (fx <= 0.0f) return xlns16_zero;
+    return fp2xlns16(log2f(fx));
+}
+
+// pow(base, exp) - computes base^exp
+inline xlns16 xlns16_pow(xlns16 base, xlns16 exponent) {
+    float fbase = xlns162fp(base);
+    float fexp = xlns162fp(exponent);
+    if (fbase <= 0.0f) return xlns16_zero;
+    return fp2xlns16(powf(fbase, fexp));
+}
 
 /*END OF PORTABLE CODE THAT DEPENDS ON <math.h>*/
 
