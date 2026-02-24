@@ -89,11 +89,11 @@ inline xlns16 xlns16_div(xlns16 x, xlns16 y)
   #include <math.h>
   inline xlns16 xlns16_sb_ideal(xlns16_signed z)
   {
-	return ((xlns16) ((log(1+ pow(2.0, ((double) z) / xlns16_scale) )/log(2.0))*xlns16_scale+.5));
+	return ((xlns16) ((log2(1+ exp2( ((double) z) / xlns16_scale) ))*xlns16_scale+.5));
   }
   inline xlns16 xlns16_db_ideal(xlns16_signed z)
   {
-	return ((xlns16_signed) ((log( pow(2.0, ((double) z) / xlns16_scale) - 1 )/log(2.0))*xlns16_scale+.5));
+	return ((xlns16_signed) ((log2( exp2( ((double) z) / xlns16_scale) - 1 ))*xlns16_scale+.5));
   }
 #else
   #define xlns16_sb xlns16_sb_premit
@@ -103,7 +103,7 @@ inline xlns16 xlns16_div(xlns16 x, xlns16 y)
   #include <math.h>
   inline xlns16 xlns16_db_ideal(xlns16_signed z)  //only for singularity
   {
-	return ((xlns16_signed) ((log( pow(2.0, ((double) z) / xlns16_scale) - 1 )/log(2.0))*xlns16_scale+.5));
+	return ((xlns16_signed) ((log2( exp2( ((double) z) / xlns16_scale) - 1 ))*xlns16_scale+.5));
   }
   inline xlns16 xlns16_mitch(xlns16 z)
   {
@@ -251,10 +251,10 @@ xlns16 fp2xlns16(float x)
 	if (x==0.0)
 		return(xlns16_zero);
 	else if (x > 0.0)
-		return xlns16_abs((xlns16_signed) ((log(x)/log(2.0))*xlns16_scale))
+		return xlns16_abs((xlns16_signed) ((log2(x))*xlns16_scale))
 		       ^xlns16_logsignmask;
 	else
-		return (((xlns16_signed) ((log(fabs(x))/log(2.0))*xlns16_scale))
+		return (((xlns16_signed) ((log2(fabs(x)))*xlns16_scale))
 			  |xlns16_signmask)^xlns16_logsignmask;
 }
 
@@ -264,10 +264,10 @@ float xlns162fp(xlns16 x)
 	if (xlns16_abs(x) == xlns16_zero)
 		return (0.0);
 	else if (xlns16_sign(x))
-		return (float) (-pow(2.0,((double) (((xlns16_signed) (xlns16_abs(x)-xlns16_logsignmask))))
+		return (float) (-exp2(((double) (((xlns16_signed) (xlns16_abs(x)-xlns16_logsignmask))))
 					/((float) xlns16_scale)));
 	else {
-		return (float) (+pow(2.0,((double) (((xlns16_signed) (xlns16_abs(x)-xlns16_logsignmask))))
+		return (float) (+exp2(((double) (((xlns16_signed) (xlns16_abs(x)-xlns16_logsignmask))))
 					/((float) xlns16_scale)));
 	}
 }
@@ -369,7 +369,11 @@ xlns16 xlns16_cachecontent[xlns16_cachesize];
 float xlns16_cachetag[xlns16_cachesize];
 long xlns16_misses=0;
 long xlns16_hits=0;
-#define xlns16_cacheon 0// off for table
+#ifdef xlns16_table
+#define xlns16_cacheon 0// not needed with table lookup
+#else
+#define xlns16_cacheon 1// enable for non-table modes
+#endif
 
 xlns16_float float2xlns16_(float y) {
 	xlns16_float z;

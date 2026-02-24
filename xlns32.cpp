@@ -98,11 +98,11 @@ inline xlns32 xlns32_div(xlns32 x, xlns32 y)
   #include <math.h>
   inline xlns32 xlns32_sb_ideal(xlns32 z)
   {
-	return ((xlns32) ((log(1+ pow(2.0, ((double) z) / xlns32_scale) )/log(2.0))*xlns32_scale+.5));
+	return ((xlns32) ((log2(1+ exp2( ((double) z) / xlns32_scale) ))*xlns32_scale+.5));
   }
   inline xlns32 xlns32_db_ideal(xlns32 z)
   {
-	return ((xlns32_signed) ((log( pow(2.0, ((double) z) / xlns32_scale) - 1 )/log(2.0))*xlns32_scale+.5));
+	return ((xlns32_signed) ((log2( exp2( ((double) z) / xlns32_scale) - 1 ))*xlns32_scale+.5));
   }
 #else
   #define xlns32_sb xlns32_sb_macro
@@ -277,10 +277,10 @@ xlns32 fp2xlns32(float x)
 	if (x==0.0)
 		return(xlns32_zero);
 	else if (x > 0.0)
-		return xlns32_abs((xlns32_signed) ((log(x)/log(2.0))*xlns32_scale))
+		return xlns32_abs((xlns32_signed) ((log2(x))*xlns32_scale))
 		       ^xlns32_logsignmask;
 	else
-		return (((xlns32_signed) ((log(fabs(x))/log(2.0))*xlns32_scale))
+		return (((xlns32_signed) ((log2(fabs(x)))*xlns32_scale))
 			  |xlns32_signmask)^xlns32_logsignmask;
 }
 
@@ -289,10 +289,10 @@ float xlns322fp(xlns32 x)
 	if (xlns32_abs(x) == xlns32_zero)
 		return (0.0);
 	else if (xlns32_sign(x))
-		return (float) (-pow(2.0,((double) (((xlns32_signed) (xlns32_abs(x)-xlns32_logsignmask))))
+		return (float) (-exp2(((double) (((xlns32_signed) (xlns32_abs(x)-xlns32_logsignmask))))
 					/((float) xlns32_scale)));
 	else {
-		return (float) (+pow(2.0,((double) (((xlns32_signed) (xlns32_abs(x)-xlns32_logsignmask))))
+		return (float) (+exp2(((double) (((xlns32_signed) (xlns32_abs(x)-xlns32_logsignmask))))
 					/((float) xlns32_scale)));
 	//else if (xlns32_sign(x))
 	//	return (float) (-pow(2.0,((double) ((xlns32_signed) xlns32_abs(x^xlns32_logsignmask)<<1)/2)
