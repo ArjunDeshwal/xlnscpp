@@ -583,6 +583,14 @@ inline xlns16 xlns16_log(xlns16 x) {
 }
 #endif
 
+#ifdef xlns16_table
+#include "xlns16exp2tbl.h"
+#include "xlns16log2tbl.h"
+// exp2(x) - computes 2^x
+inline xlns16 xlns16_exp2(xlns16 x) { return xlns16exp2tbl[x]; }
+// log2(x) - computes log base 2
+inline xlns16 xlns16_log2(xlns16 x) { return xlns16log2tbl[x]; }
+#else
 // exp2(x) - computes 2^x
 inline xlns16 xlns16_exp2(xlns16 x) {
     float fx = xlns162fp(x);
@@ -595,6 +603,7 @@ inline xlns16 xlns16_log2(xlns16 x) {
     if (fx <= 0.0f) return xlns16_zero;
     return fp2xlns16(log2f(fx));
 }
+#endif
 
 // pow(base, exp) - computes base^exp
 inline xlns16 xlns16_pow(xlns16 base, xlns16 exponent) {
